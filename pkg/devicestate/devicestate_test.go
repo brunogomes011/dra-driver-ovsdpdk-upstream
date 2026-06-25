@@ -487,6 +487,30 @@ var _ = Describe("DeviceState prepare/unprepare", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		It("should pass VLAN tag to CreatePort params", func(ctx SpecContext) {
+			ds, mockFS, mockOVS, _ := newDeviceStateWithMocks(ctx, nil)
+
+			cfg := ovsportv1alpha1.OvsPortConfig{}
+			cfg.APIVersion = ovsportv1alpha1.APIVersion
+			cfg.Kind = ovsportv1alpha1.KindOvsPortConfig
+			cfg.Vlan = new(500)
+
+			claim := makeClaimWithConfig(
+				"abcdef12-0000-0000-0000-000000000000", "pod-uid-vlan",
+				"claim", "vhost", "br0",
+				[]resourceapi.DeviceAllocationConfiguration{makePortConfigEntry(cfg)},
+			)
+			mockFS.EXPECT().CreateSocketDir(mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+			mockOVS.EXPECT().CreatePort(mock.Anything, "br0", mock.Anything, mock.Anything,
+				mock.MatchedBy(func(p *ovs.OvsPortParams) bool {
+					return p.Vlan != nil && *p.Vlan == 500
+				}),
+			).Return(nil).Once()
+
+			_, err := ds.PrepareResourceClaim(ctx, claim)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
 		It("should roll back the socket directory when CreatePort fails", func(ctx SpecContext) {
 			ds, mockFS, mockOVS, _ := newDeviceStateWithMocks(ctx, nil)
 
@@ -605,26 +629,6 @@ var _ = Describe("DeviceState prepare/unprepare", func() {
 })
 
 var _ = Describe("DeviceState port config", func() {
-	makeClaimWithConfig := func(claimUID, podUID k8stypes.UID, claimName, podClaimName, bridgeName string, configs []resourceapi.DeviceAllocationConfiguration) *resourceapi.ResourceClaim {
-		claim := makeClaim(claimUID, podUID, claimName, podClaimName, bridgeName)
-		claim.Status.Allocation.Devices.Config = configs
-		return claim
-	}
-
-	makePortConfigEntry := func(cfg ovsportv1alpha1.OvsPortConfig) resourceapi.DeviceAllocationConfiguration {
-		raw, err := json.Marshal(cfg)
-		Expect(err).NotTo(HaveOccurred())
-		return resourceapi.DeviceAllocationConfiguration{
-			Source: resourceapi.AllocationConfigSourceClaim,
-			DeviceConfiguration: resourceapi.DeviceConfiguration{
-				Opaque: &resourceapi.OpaqueDeviceConfiguration{
-					Driver:     consts.DriverName,
-					Parameters: runtime.RawExtension{Raw: raw},
-				},
-			},
-		}
-	}
-
 	Describe("PrepareResourceClaim with OvsPortConfig", func() {
 		It("should set PortConfig to the default when no opaque config is present", func(ctx SpecContext) {
 			ds, mockFS, mockOVS, _ := newDeviceStateWithMocks(ctx, nil)
@@ -675,6 +679,47 @@ var _ = Describe("DeviceState port config", func() {
 			)
 			_, err := ds.PrepareResourceClaim(ctx, claim)
 			Expect(err).To(MatchError(ContainSubstring("unexpected kind")))
+		})
+
+		It("should store the vlan from OvsPortConfig in PortConfig", func(ctx SpecContext) {
+			ds, mockFS, mockOVS, _ := newDeviceStateWithMocks(ctx, nil)
+			mockFS.EXPECT().CreateSocketDir(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+			mockOVS.EXPECT().CreatePort(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+			cfg := ovsportv1alpha1.OvsPortConfig{}
+			cfg.APIVersion = ovsportv1alpha1.APIVersion
+			cfg.Kind = ovsportv1alpha1.KindOvsPortConfig
+			cfg.Vlan = new(100)
+
+			claim := makeClaimWithConfig(
+				"abcdef12-0000-0000-0000-000000000043", "pod-uid-pc3",
+				"claim-pc3", "vhost-pc3", "br0",
+				[]resourceapi.DeviceAllocationConfiguration{makePortConfigEntry(cfg)},
+			)
+			pd, err := ds.PrepareResourceClaim(ctx, claim)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pd[0].PortConfig).NotTo(BeNil())
+			Expect(pd[0].PortConfig.Vlan).NotTo(BeNil())
+			Expect(*pd[0].PortConfig.Vlan).To(Equal(100))
+		})
+
+		It("should return an error when vlan is out of range", func(ctx SpecContext) {
+			ds, mockFS, mockOVS, _ := newDeviceStateWithMocks(ctx, nil)
+			mockFS.EXPECT().CreateSocketDir(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+			mockOVS.EXPECT().CreatePort(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+			cfg := ovsportv1alpha1.OvsPortConfig{}
+			cfg.APIVersion = ovsportv1alpha1.APIVersion
+			cfg.Kind = ovsportv1alpha1.KindOvsPortConfig
+			cfg.Vlan = new(5000)
+
+			claim := makeClaimWithConfig(
+				"abcdef12-0000-0000-0000-000000000044", "pod-uid-pc4",
+				"claim-pc4", "vhost-pc4", "br0",
+				[]resourceapi.DeviceAllocationConfiguration{makePortConfigEntry(cfg)},
+			)
+			_, err := ds.PrepareResourceClaim(ctx, claim)
+			Expect(err).To(MatchError(ContainSubstring("out of range")))
 		})
 	})
 })
@@ -729,6 +774,28 @@ func makeClaim(claimUID, podUID k8stypes.UID, claimName, podClaimName, bridgeNam
 			},
 			ReservedFor: []resourceapi.ResourceClaimConsumerReference{
 				{Resource: "pods", Name: "test-pod", UID: podUID},
+			},
+		},
+	}
+}
+
+func makeClaimWithConfig(claimUID, podUID k8stypes.UID, claimName, podClaimName, bridgeName string,
+	configs []resourceapi.DeviceAllocationConfiguration) *resourceapi.ResourceClaim {
+
+	claim := makeClaim(claimUID, podUID, claimName, podClaimName, bridgeName)
+	claim.Status.Allocation.Devices.Config = configs
+	return claim
+}
+
+func makePortConfigEntry(cfg ovsportv1alpha1.OvsPortConfig) resourceapi.DeviceAllocationConfiguration {
+	raw, err := json.Marshal(cfg)
+	Expect(err).NotTo(HaveOccurred())
+	return resourceapi.DeviceAllocationConfiguration{
+		Source: resourceapi.AllocationConfigSourceClaim,
+		DeviceConfiguration: resourceapi.DeviceConfiguration{
+			Opaque: &resourceapi.OpaqueDeviceConfiguration{
+				Driver:     consts.DriverName,
+				Parameters: runtime.RawExtension{Raw: raw},
 			},
 		},
 	}
