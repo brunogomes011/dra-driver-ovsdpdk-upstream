@@ -41,6 +41,20 @@ type Port struct {
 	ExternalIDs map[string]string `ovsdb:"external_ids"`
 }
 
+// BridgeEventType indicates whether a bridge was added or deleted.
+type BridgeEventType int
+
+const (
+	BridgeAdded BridgeEventType = iota
+	BridgeDeleted
+)
+
+// BridgeEvent represents a bridge add/delete notification from the OVSDB monitor.
+type BridgeEvent struct {
+	Name string
+	Type BridgeEventType
+}
+
 // Interface represents a row in the Interface table.
 type Interface struct {
 	UUID    string            `ovsdb:"_uuid"`

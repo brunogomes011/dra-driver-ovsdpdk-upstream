@@ -29,12 +29,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	ovsdpdkdrav1alpha1 "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
 	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/devicestate"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/ovs"
 )
 
 const (
@@ -48,6 +51,7 @@ type OvsDpdkResourcePolicyReconciler struct {
 	namespace          string
 	log                klog.Logger
 	deviceStateManager *devicestate.DeviceState
+	ovsClient          ovs.Client
 }
 
 // NewOvsDpdkResourcePolicyReconciler creates a new OvsDpdkResourcePolicyReconciler.
@@ -55,6 +59,7 @@ func NewOvsDpdkResourcePolicyReconciler(
 	c client.Client,
 	nodeName, namespace string,
 	deviceStateManager *devicestate.DeviceState,
+	ovsClient ovs.Client,
 ) *OvsDpdkResourcePolicyReconciler {
 	return &OvsDpdkResourcePolicyReconciler{
 		Client:             c,
@@ -62,6 +67,7 @@ func NewOvsDpdkResourcePolicyReconciler(
 		namespace:          namespace,
 		log:                klog.Background().WithName("OvsDpdkResourcePolicyReconciler"),
 		deviceStateManager: deviceStateManager,
+		ovsClient:          ovsClient,
 	}
 }
 
@@ -90,8 +96,9 @@ func (r *OvsDpdkResourcePolicyReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, err
 	}
 
-	// Collect bridge specs from all matching policies.
-	var bridges []ovsdpdkdrav1alpha1.BridgeSpec
+	// Collect bridge specs from all matching policies, filtering out bridges
+	// not yet present in OVS.
+	var activeBridges []ovsdpdkdrav1alpha1.BridgeSpec
 	for _, policy := range policyList.Items {
 		if !r.matchesNodeSelector(nodeMeta, policy.Spec.NodeSelector) {
 			r.log.V(2).Info("Policy does not match node, skipping",
@@ -100,12 +107,24 @@ func (r *OvsDpdkResourcePolicyReconciler) Reconcile(ctx context.Context, req ctr
 		}
 		r.log.V(2).Info("Policy matches node, collecting bridges",
 			"policy", policy.Name, "bridges", len(policy.Spec.Bridges))
-		bridges = append(bridges, policy.Spec.Bridges...)
+
+		for _, b := range policy.Spec.Bridges {
+			present, err := r.ovsClient.BridgeExists(b.Name)
+			if err != nil {
+				r.log.Error(err, "Failed to check bridge existence", "bridge", b.Name)
+				return ctrl.Result{}, err
+			}
+			if !present {
+				r.log.Info("Bridge not yet present in OVS, skipping", "bridge", b.Name)
+				continue
+			}
+			activeBridges = append(activeBridges, b)
+		}
 	}
 
-	r.log.Info("Reconciled policies", "matchingBridges", len(bridges))
+	r.log.Info("Reconciled policies", "matchingBridges", len(activeBridges))
 
-	if err := r.deviceStateManager.UpdatePolicyDevices(ctx, bridges); err != nil {
+	if err := r.deviceStateManager.UpdatePolicyDevices(ctx, activeBridges); err != nil {
 		r.log.Error(err, "Failed to update policy devices")
 		return ctrl.Result{}, err
 	}
@@ -155,6 +174,22 @@ func (r *OvsDpdkResourcePolicyReconciler) SetupWithManager(mgr ctrl.Manager) err
 	nodeMetadata := &metav1.PartialObjectMetadata{}
 	nodeMetadata.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Node"))
 
+	triggerChan := make(chan event.GenericEvent, 1)
+
+	r.ovsClient.SetBridgeNotifier(func(ev ovs.BridgeEvent) {
+		select {
+		case triggerChan <- event.GenericEvent{
+			Object: &ovsdpdkdrav1alpha1.OvsDpdkResourcePolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourcePolicySyncEventName,
+					Namespace: r.namespace,
+				},
+			},
+		}:
+		default:
+		}
+	})
+
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("ovsdpdkresourcepolicy").
 		Watches(&ovsdpdkdrav1alpha1.OvsDpdkResourcePolicy{},
@@ -163,5 +198,6 @@ func (r *OvsDpdkResourcePolicyReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Watches(nodeMetadata,
 			handler.EnqueueRequestsFromMapFunc(mapFn),
 			builder.WithPredicates(nodePredicate)).
+		WatchesRawSource(source.Channel(triggerChan, handler.EnqueueRequestsFromMapFunc(mapFn))).
 		Complete(r)
 }
