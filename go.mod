@@ -11,6 +11,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
 	golang.org/x/sys v0.45.0
+	google.golang.org/grpc v1.82.1
 	k8s.io/api v0.36.2
 	k8s.io/apimachinery v0.36.2
 	k8s.io/client-go v0.36.2
@@ -18,6 +19,7 @@ require (
 	k8s.io/component-helpers v0.36.2
 	k8s.io/dynamic-resource-allocation v0.36.2
 	k8s.io/klog/v2 v2.140.0
+	k8s.io/kubelet v0.36.2
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
 	sigs.k8s.io/controller-runtime v0.24.1
 	tags.cncf.io/container-device-interface v1.1.0
