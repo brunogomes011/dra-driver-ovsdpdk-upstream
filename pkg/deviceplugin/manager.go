@@ -79,7 +79,11 @@ func NewManager(ctx context.Context, ovsClient ovs.Client) (*Manager, error) {
 		ctx:       ctx,
 		log:       klog.Background().WithName("dp.Manager"),
 	}
+
+	ovsClient.SetInterfaceNotifier(m.OnInterfaceChange)
+
 	if err := startKubeletWatcherFunc(m); err != nil {
+		ovsClient.SetInterfaceNotifier(nil)
 		return nil, fmt.Errorf("start kubelet watcher: %w", err)
 	}
 	return m, nil
@@ -134,6 +138,31 @@ func (m *Manager) UpdateResources(ctx context.Context, bridges []ovsdpdkdrav1alp
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// OnInterfaceChange re-evaluates the Device Plugin server when a DPDK interface
+// is added or removed from the bridge.
+func (m *Manager) OnInterfaceChange(brName string) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	resName, wanted := m.topology[bridgeName(brName)]
+	if !wanted {
+		// Bridge not configured for topology; ignore interface changes.
+		return
+	}
+
+	// Rebuild the list of bridges for this resource.
+	var brNames []bridgeName
+	for br, res := range m.topology {
+		if res == resName {
+			brNames = append(brNames, br)
+		}
+	}
+
+	if err := m.ensureServer(resName, brNames); err != nil {
+		m.log.Error(err, "Failed to ensure server on interface change", "resource", resName)
+	}
 }
 
 // ensureServer ensures the Device Plugin server for the given resource is in the
