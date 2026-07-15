@@ -21,11 +21,14 @@ import (
 	"fmt"
 
 	resourceapi "k8s.io/api/resource/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
 
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/consts"
 	dratypes "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/types"
 )
 
@@ -61,9 +64,37 @@ func (d *Driver) PrepareResourceClaims(ctx context.Context, claims []*resourceap
 }
 
 func (d *Driver) updateClaimStatus(ctx context.Context, claim *resourceapi.ResourceClaim) {
+	// Snapshot only our driver's device entries so that they survive a claim
+	// pointer swap on conflict. Other drivers' entries will be preserved from
+	// the refreshed claim.
+	ownedDevices := filterDevicesByDriver(claim.Status.Devices, consts.DriverName)
 
-	if _, err := d.client.ResourceV1().ResourceClaims(claim.Namespace).UpdateStatus(ctx, claim, metav1.UpdateOptions{}); err != nil {
-		d.log.Error(err, "Failed to update claim status", "claimUID", claim.UID)
+	err := wait.ExponentialBackoffWithContext(ctx, consts.Backoff, func(ctx context.Context) (bool, error) {
+		_, updateErr := d.client.ResourceV1().ResourceClaims(claim.Namespace).UpdateStatus(ctx, claim, metav1.UpdateOptions{})
+		if updateErr == nil {
+			return true, nil
+		}
+
+		if apierrors.IsConflict(updateErr) {
+			d.log.V(2).Info("Conflict updating claim status, refreshing claim", "claimUID", claim.UID)
+			freshClaim, fetchErr := d.client.ResourceV1().ResourceClaims(claim.Namespace).Get(ctx, claim.Name, metav1.GetOptions{})
+			if fetchErr != nil {
+				d.log.V(2).Info("Failed to fetch fresh claim, will retry", "claimUID", claim.UID, "error", fetchErr)
+				return false, nil
+			}
+			// Merge our owned entries into the refreshed claim, preserving
+			// entries from other drivers.
+			freshClaim.Status.Devices = mergeDeviceStatus(freshClaim.Status.Devices, ownedDevices, consts.DriverName)
+			claim = freshClaim
+			d.log.V(2).Info("Refreshed claim, retrying status update", "claimUID", claim.UID)
+		} else {
+			d.log.V(2).Info("Retrying claim status update", "claimUID", claim.UID, "error", updateErr)
+		}
+		return false, nil
+	})
+
+	if err != nil {
+		d.log.Error(err, "Failed to update claim status after retries", "claimUID", claim.UID)
 	} else {
 		d.log.V(1).Info("Updated claim status", "claimUID", claim.UID)
 	}
@@ -106,4 +137,29 @@ func preparedDevicesToResult(preparedDevices []*dratypes.PreparedDevice) kubelet
 	return kubeletplugin.PrepareResult{
 		Devices: devices,
 	}
+}
+
+// filterDevicesByDriver returns only the device status entries for the given driver.
+func filterDevicesByDriver(devices []resourceapi.AllocatedDeviceStatus, driver string) []resourceapi.AllocatedDeviceStatus {
+	var filtered []resourceapi.AllocatedDeviceStatus
+	for _, d := range devices {
+		if d.Driver == driver {
+			filtered = append(filtered, d)
+		}
+	}
+	return filtered
+}
+
+// mergeDeviceStatus merges owned device entries into the target slice.
+// It first removes any existing entries for the given driver from target,
+// then appends all owned entries. This preserves entries from other drivers
+// while updating our own.
+func mergeDeviceStatus(target, owned []resourceapi.AllocatedDeviceStatus, driver string) []resourceapi.AllocatedDeviceStatus {
+	var merged []resourceapi.AllocatedDeviceStatus
+	for _, d := range target {
+		if d.Driver != driver {
+			merged = append(merged, d)
+		}
+	}
+	return append(merged, owned...)
 }
