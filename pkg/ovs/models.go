@@ -57,10 +57,12 @@ type BridgeEvent struct {
 
 // Interface represents a row in the Interface table.
 type Interface struct {
-	UUID    string            `ovsdb:"_uuid"`
-	Name    string            `ovsdb:"name"`
-	Type    string            `ovsdb:"type"`
-	Options map[string]string `ovsdb:"options"`
+	UUID                 string            `ovsdb:"_uuid"`
+	Name                 string            `ovsdb:"name"`
+	Type                 string            `ovsdb:"type"`
+	Options              map[string]string `ovsdb:"options"`
+	IngressPolicingRate  int               `ovsdb:"ingress_policing_rate"`
+	IngressPolicingBurst int               `ovsdb:"ingress_policing_burst"`
 }
 
 // ifaceEvent is an internal notification for a dpdk interface add or delete.
