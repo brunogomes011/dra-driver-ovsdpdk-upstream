@@ -63,6 +63,7 @@ type Interface struct {
 	Options              map[string]string `ovsdb:"options"`
 	IngressPolicingRate  int               `ovsdb:"ingress_policing_rate"`
 	IngressPolicingBurst int               `ovsdb:"ingress_policing_burst"`
+	MTURequest           *int              `ovsdb:"mtu_request"`
 }
 
 // ifaceEvent is an internal notification for a dpdk interface add or delete.
