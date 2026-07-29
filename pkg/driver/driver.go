@@ -28,9 +28,9 @@ import (
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/klog/v2"
 
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/consts"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/devicestate"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/podmanager"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/consts"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/devicestate"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/podmanager"
 )
 
 // Driver is the DRA kubelet plugin for OVS-DPDK vhost-user ports.

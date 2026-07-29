@@ -19,7 +19,7 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/consts"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/consts"
 )
 
 const (

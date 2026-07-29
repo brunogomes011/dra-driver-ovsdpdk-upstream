@@ -26,8 +26,8 @@ import (
 	cdiparser "tags.cncf.io/container-device-interface/pkg/parser"
 	cdispecs "tags.cncf.io/container-device-interface/specs-go"
 
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/consts"
-	dratypes "github.com/amorenoz/dra-driver-ovsdpdk/pkg/types"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/consts"
+	dratypes "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/types"
 )
 
 const (

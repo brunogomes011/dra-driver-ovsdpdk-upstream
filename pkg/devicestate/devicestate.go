@@ -37,13 +37,13 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
-	ovsdpdkdrav1alpha1 "github.com/amorenoz/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
-	ovsportv1alpha1 "github.com/amorenoz/dra-driver-ovsdpdk/pkg/api/ovsport/v1alpha1"
-	dracdi "github.com/amorenoz/dra-driver-ovsdpdk/pkg/cdi"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/consts"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/ovs"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/socketfs"
-	dratypes "github.com/amorenoz/dra-driver-ovsdpdk/pkg/types"
+	ovsdpdkdrav1alpha1 "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
+	ovsportv1alpha1 "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/api/ovsport/v1alpha1"
+	dracdi "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/cdi"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/consts"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/ovs"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/socketfs"
+	dratypes "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/types"
 )
 
 // AllocatableDevices maps device names to their DRA device specifications.

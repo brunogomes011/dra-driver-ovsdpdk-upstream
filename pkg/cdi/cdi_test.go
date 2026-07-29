@@ -29,8 +29,8 @@ import (
 	cdiapi "tags.cncf.io/container-device-interface/pkg/cdi"
 	cdispecs "tags.cncf.io/container-device-interface/specs-go"
 
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/cdi"
-	dratypes "github.com/amorenoz/dra-driver-ovsdpdk/pkg/types"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/cdi"
+	dratypes "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/types"
 )
 
 func TestCDI(t *testing.T) {

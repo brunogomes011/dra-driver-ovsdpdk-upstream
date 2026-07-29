@@ -23,9 +23,9 @@ import (
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	ovsportv1alpha1 "github.com/amorenoz/dra-driver-ovsdpdk/pkg/api/ovsport/v1alpha1"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/consts"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/flags"
+	ovsportv1alpha1 "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/api/ovsport/v1alpha1"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/consts"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/flags"
 )
 
 // Flags holds all parsed CLI flags.

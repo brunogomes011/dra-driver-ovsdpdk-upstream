@@ -36,14 +36,14 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 
-	ovsdpdkdrav1alpha1 "github.com/amorenoz/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
-	ovsportv1alpha1 "github.com/amorenoz/dra-driver-ovsdpdk/pkg/api/ovsport/v1alpha1"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/cdi"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/consts"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/devicestate"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/ovs"
-	ovsmocks "github.com/amorenoz/dra-driver-ovsdpdk/pkg/ovs/mocks"
-	socketfsmocks "github.com/amorenoz/dra-driver-ovsdpdk/pkg/socketfs/mocks"
+	ovsdpdkdrav1alpha1 "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
+	ovsportv1alpha1 "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/api/ovsport/v1alpha1"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/cdi"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/consts"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/devicestate"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/ovs"
+	ovsmocks "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/ovs/mocks"
+	socketfsmocks "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/socketfs/mocks"
 )
 
 func TestDeviceState(t *testing.T) {

@@ -31,8 +31,8 @@ import (
 	. "github.com/onsi/gomega"
 	"golang.org/x/sys/unix"
 
-	ovsdpdkdrav1alpha1 "github.com/amorenoz/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/socketfs"
+	ovsdpdkdrav1alpha1 "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/socketfs"
 )
 
 func TestSocketFS(t *testing.T) {

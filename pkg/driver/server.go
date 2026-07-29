@@ -26,7 +26,7 @@ import (
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
 
-	dratypes "github.com/amorenoz/dra-driver-ovsdpdk/pkg/types"
+	dratypes "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/types"
 )
 
 func (d *Driver) PrepareResourceClaims(ctx context.Context, claims []*resourceapi.ResourceClaim) (map[k8stypes.UID]kubeletplugin.PrepareResult, error) {

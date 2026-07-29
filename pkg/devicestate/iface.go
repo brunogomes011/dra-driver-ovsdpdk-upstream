@@ -21,7 +21,7 @@ import (
 
 	resourceapi "k8s.io/api/resource/v1"
 
-	dratypes "github.com/amorenoz/dra-driver-ovsdpdk/pkg/types"
+	dratypes "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/types"
 )
 
 // DeviceStateIface is the interface consumed by the driver layer.

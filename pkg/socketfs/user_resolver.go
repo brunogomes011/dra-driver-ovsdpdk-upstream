@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"sync"
 
-	ovsdpdkdrav1alpha1 "github.com/amorenoz/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
+	ovsdpdkdrav1alpha1 "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
 )
 
 // userResolver resolves user and group names to numeric IDs using the standard

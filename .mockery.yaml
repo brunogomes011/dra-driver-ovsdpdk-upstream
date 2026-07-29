@@ -3,19 +3,19 @@ resolve-type-alias: false
 disable-version-string: true
 issue-845-fix: true
 packages:
-  github.com/amorenoz/dra-driver-ovsdpdk/pkg/socketfs:
+  github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/socketfs:
     config:
       dir: "pkg/socketfs/mocks"
       outpkg: "mocks"
     interfaces:
       SocketFS:
-  github.com/amorenoz/dra-driver-ovsdpdk/pkg/ovs:
+  github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/ovs:
     config:
       dir: "pkg/ovs/mocks"
       outpkg: "mocks"
     interfaces:
       Client:
-  github.com/amorenoz/dra-driver-ovsdpdk/pkg/devicestate:
+  github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/devicestate:
     config:
       dir: "pkg/devicestate/mocks"
       outpkg: "mocks"

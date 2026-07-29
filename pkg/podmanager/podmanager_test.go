@@ -26,8 +26,8 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/podmanager"
-	dratypes "github.com/amorenoz/dra-driver-ovsdpdk/pkg/types"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/podmanager"
+	dratypes "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/types"
 )
 
 func TestPodManager(t *testing.T) {

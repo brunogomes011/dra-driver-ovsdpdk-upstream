@@ -33,8 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	ovsdpdkdrav1alpha1 "github.com/amorenoz/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/devicestate"
+	ovsdpdkdrav1alpha1 "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/devicestate"
 )
 
 const (

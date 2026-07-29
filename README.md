@@ -89,7 +89,7 @@ spec:
 ### Build and push
 
 ```bash
-export IMAGE_NAME=quay.io/amorenoz/dra-driver-ovsdpdk  # adjust as needed
+export IMAGE_NAME=ghcr.io/k8snetworkplumbingwg/dra-driver-ovsdpdk  # adjust as needed
 export IMAGE_TAG=latest
 make build-image
 podman push "${IMAGE_NAME}:${IMAGE_TAG}"

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 DRIVER_NAME := dra-driver-ovsdpdk
-MODULE      := github.com/amorenoz/dra-driver-ovsdpdk
+MODULE      := github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk
 
 GOLANG_VERSION        ?= 1.26
 GOLANGCI_LINT_VERSION ?= v2.7.2
@@ -21,7 +21,7 @@ CONTROLLER_GEN_VERSION ?= v0.21.0
 MOCKERY_VERSION        ?= v2.53.6
 
 CONTAINER_TOOL ?= podman
-REGISTRY       ?= quay.io/amorenoz
+REGISTRY       ?= ghcr.io/k8snetworkplumbingwg
 IMAGE_NAME     ?= $(REGISTRY)/$(DRIVER_NAME)
 IMAGE_TAG      ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
