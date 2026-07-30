@@ -1,4 +1,4 @@
-module github.com/amorenoz/dra-driver-ovsdpdk
+module github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk
 
 go 1.26.0
 

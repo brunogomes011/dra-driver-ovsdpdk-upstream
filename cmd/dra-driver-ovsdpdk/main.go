@@ -32,15 +32,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/cdi"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/consts"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/controllers"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/devicestate"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/driver"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/flags"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/ovs"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/socketfs"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/types"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/cdi"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/consts"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/controllers"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/devicestate"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/driver"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/flags"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/ovs"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/socketfs"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/types"
 )
 
 const (

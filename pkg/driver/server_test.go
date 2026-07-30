@@ -32,9 +32,9 @@ import (
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
 
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/devicestate/mocks"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/podmanager"
-	dratypes "github.com/amorenoz/dra-driver-ovsdpdk/pkg/types"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/devicestate/mocks"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/podmanager"
+	dratypes "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/types"
 )
 
 func TestDriver(t *testing.T) {

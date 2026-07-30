@@ -5,10 +5,10 @@ package mocks
 import (
 	context "context"
 
-	devicestate "github.com/amorenoz/dra-driver-ovsdpdk/pkg/devicestate"
+	devicestate "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/devicestate"
 	mock "github.com/stretchr/testify/mock"
 
-	types "github.com/amorenoz/dra-driver-ovsdpdk/pkg/types"
+	types "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/types"
 
 	v1 "k8s.io/api/resource/v1"
 )

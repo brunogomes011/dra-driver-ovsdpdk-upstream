@@ -23,7 +23,7 @@ import (
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	dratypes "github.com/amorenoz/dra-driver-ovsdpdk/pkg/types"
+	dratypes "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/types"
 )
 
 // PodManager is a thread-safe cache of PreparedDevice records keyed by claim UID.

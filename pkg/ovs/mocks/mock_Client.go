@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	ovs "github.com/amorenoz/dra-driver-ovsdpdk/pkg/ovs"
+	ovs "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/ovs"
 	mock "github.com/stretchr/testify/mock"
 )
 

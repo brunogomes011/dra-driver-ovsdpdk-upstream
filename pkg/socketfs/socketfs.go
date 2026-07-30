@@ -29,7 +29,7 @@ import (
 	"golang.org/x/sys/unix"
 	"k8s.io/klog/v2"
 
-	ovsdpdkdrav1alpha1 "github.com/amorenoz/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
+	ovsdpdkdrav1alpha1 "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/api/ovsdpdkdra/v1alpha1"
 )
 
 // SocketFS manages creation and removal of socket directories.

@@ -23,8 +23,8 @@ import (
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/klog/v2"
 
-	ovsportv1alpha1 "github.com/amorenoz/dra-driver-ovsdpdk/pkg/api/ovsport/v1alpha1"
-	"github.com/amorenoz/dra-driver-ovsdpdk/pkg/consts"
+	ovsportv1alpha1 "github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/api/ovsport/v1alpha1"
+	"github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk/pkg/consts"
 )
 
 // claimPortConfigs holds parsed per-request and default port configurations.
