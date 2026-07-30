@@ -1,0 +1,10 @@
+# DeviceClass that matches any device advertised by the OVS-DPDK driver.
+# Pods reference this class in their ResourceClaim specs.
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: ovsdpdk
+spec:
+  selectors:
+    - cel:
+        expression: 'device.driver == "ovsdpdk.k8snetworkplumbingwg.io"'
