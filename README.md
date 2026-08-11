@@ -70,6 +70,7 @@ spec:
 | Field | Required | Description |
 |---|---|---|
 | `bridges[].name` | yes | OVS bridge name to advertise as a DRA device |
+| `bridges[].topologyResource` | no | Enable a topology Device Plugin for this bridge (see [Topology Device Plugin](#topology-device-plugin)) |
 | `nodeSelector` | no | Limit to matching nodes; omit for all nodes |
 
 
@@ -296,4 +297,73 @@ The file is a JSON stream in the `metadata.resource.k8s.io/v1alpha1` format. It 
 | Attribute key | Value |
 |---|---|
 | `vhost-user-path` | Container-side path of the vhost-user socket |
+
+## Topology Device Plugin
+
+The driver can optionally run a Kubernetes [Device Plugin](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/) to expose the NUMA topology of DPDK bridges. This enables the kubelet's Topology Manager to schedule pods on NUMA-local CPUs and memory, reducing latency for DPDK workloads.
+
+### How it works
+
+1. When `topologyResource` is set on one or more bridges in the resource policy, the driver queries the NUMA affinity of each bridge's DPDK interfaces.
+2. If all bridges sharing the same `topologyResource` reside on the same NUMA node, the driver starts a single Device Plugin advertising that topology.
+3. The Device Plugin registers an extended resource (e.g. `ovsdpdk.k8snetworkplumbingwg.io/numa0-bridges`) with 1024 devices, each annotated with the NUMA node.
+4. Pods requesting this resource get scheduled according to the kubelet's Topology Manager policy.
+
+The Device Plugin only carries topology information — it does not inject devices into containers. Use it alongside the DRA claim when NUMA alignment matters.
+
+### Configuration
+
+Add `topologyResource` to bridge entries in your `OvsDpdkResourcePolicy`. Multiple bridges can share the same `topologyResource` if they reside on the same NUMA node:
+
+```yaml
+apiVersion: ovsdpdk.k8snetworkplumbingwg.io/v1alpha1
+kind: OvsDpdkResourcePolicy
+metadata:
+  name: worker-policy
+  namespace: dra-driver-ovsdpdk
+spec:
+  bridges:
+    # Two bridges on NUMA 0 share a single topology resource
+    - name: br-dpdk0
+      topologyResource: numa0-bridges
+    - name: br-dpdk1
+      topologyResource: numa0-bridges
+    # A bridge on NUMA 1 uses its own topology resource
+    - name: br-dpdk2
+      topologyResource: numa1-bridges
+```
+
+The value is a suffix; the full extended resource name becomes `ovsdpdk.k8snetworkplumbingwg.io/<suffix>`.
+
+### Consuming the topology resource
+
+Request the topology resource in your pod spec alongside the DRA claim:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: numa-aware-dpdk-pod
+spec:
+  restartPolicy: Never
+  resourceClaims:
+    - name: vhost
+      resourceClaimTemplateName: dpdk-port
+  containers:
+    - name: app
+      image: quay.io/fedora/fedora-minimal:latest
+      command: ["sleep", "INF"]
+      resources:
+        claims:
+          - name: vhost
+        limits:
+          ovsdpdk.k8snetworkplumbingwg.io/numa0-bridges: 1
+```
+
+### Requirements
+
+- The kubelet must have Topology Manager enabled. Use `--topology-manager-policy=restricted` or `single-numa-node` to enforce NUMA alignment; `best-effort` provides hints but does not reject pods when alignment cannot be achieved.
+- Each bridge must have at least one DPDK interface with known NUMA affinity.
+- All DPDK interfaces on a bridge must reside on the same NUMA node.
+- All bridges sharing a `topologyResource` must reside on the same NUMA node; if they span multiple NUMA nodes, the Device Plugin is not started.
 
