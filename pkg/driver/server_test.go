@@ -26,9 +26,13 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	resourceapi "k8s.io/api/resource/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
 
@@ -191,6 +195,127 @@ var _ = Describe("PrepareResourceClaims", func() {
 
 		It("calls UpdateStatus on the k8s client", func() {
 			Expect(hasUpdateStatusAction(client, "default")).To(BeTrue())
+		})
+	})
+
+	Context("when UpdateStatus returns a conflict on the first attempt", func() {
+		It("retries, re-fetches the claim, and eventually succeeds", func() {
+			claim := makeClaim("uid-conflict", "claim-conflict", "default")
+			_, _ = client.ResourceV1().ResourceClaims("default").Create(ctx, claim, metav1.CreateOptions{})
+
+			ds.EXPECT().PrepareResourceClaim(mock.Anything, mock.Anything).
+				Return(makePreparedDevices("uid-conflict", "claim-conflict", "default"), nil).Once()
+
+			// Inject a conflict error on the first UpdateStatus call only.
+			conflictErr := apierrors.NewConflict(
+				schema.GroupResource{Group: "resource.k8s.io", Resource: "resourceclaims"},
+				"claim-conflict",
+				errors.New("resource version mismatch"),
+			)
+			firstCall := true
+			updateStatusCalls := 0
+			getCalls := 0
+			client.PrependReactor("update", "resourceclaims", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				if action.GetSubresource() != "status" {
+					return false, nil, nil
+				}
+				updateStatusCalls++
+				if firstCall {
+					firstCall = false
+					return true, nil, conflictErr
+				}
+				return false, nil, nil // let the default reactor handle subsequent calls
+			})
+			client.PrependReactor("get", "resourceclaims", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				getCalls++
+				return false, nil, nil
+			})
+
+			result, err := drv.PrepareResourceClaims(ctx, []*resourceapi.ResourceClaim{claim})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result[claim.UID].Err).To(BeNil())
+			Expect(updateStatusCalls).To(Equal(2))
+			Expect(getCalls).To(Equal(1))
+		})
+
+		It("preserves device status entries from other drivers after conflict refresh", func() {
+			otherDriverEntry := resourceapi.AllocatedDeviceStatus{
+				Driver: "other-driver.example.com",
+				Pool:   "other-pool",
+				Device: "other-device",
+			}
+			ownDriverEntry := resourceapi.AllocatedDeviceStatus{
+				Driver: "ovsdpdk.k8snetworkplumbingwg.io",
+				Pool:   "test-node",
+				Device: "br-dpdk0",
+			}
+
+			claim := makeClaim("uid-multi-driver", "claim-multi-driver", "default")
+			_, _ = client.ResourceV1().ResourceClaims("default").Create(ctx, claim, metav1.CreateOptions{})
+
+			// The mock must simulate what the real PrepareResourceClaim does:
+			// it populates claim.Status.Devices with our driver's entries.
+			ds.EXPECT().PrepareResourceClaim(mock.Anything, mock.Anything).
+				RunAndReturn(func(_ context.Context, c *resourceapi.ResourceClaim) ([]*dratypes.PreparedDevice, error) {
+					c.Status.Devices = append(c.Status.Devices, ownDriverEntry)
+					return makePreparedDevices("uid-multi-driver", "claim-multi-driver", "default"), nil
+				}).Once()
+
+			conflictErr := apierrors.NewConflict(
+				schema.GroupResource{Group: "resource.k8s.io", Resource: "resourceclaims"},
+				"claim-multi-driver",
+				errors.New("resource version mismatch"),
+			)
+
+			firstCall := true
+			var lastUpdateAction k8stesting.UpdateAction
+			client.PrependReactor("update", "resourceclaims", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				if action.GetSubresource() != "status" {
+					return false, nil, nil
+				}
+				updateAction, ok := action.(k8stesting.UpdateAction)
+				Expect(ok).To(BeTrue(), "expected UpdateAction")
+				if firstCall {
+					firstCall = false
+					return true, nil, conflictErr
+				}
+				lastUpdateAction = updateAction
+				return false, nil, nil
+			})
+
+			// Inject a reactor for Get that returns a claim with the other driver's entry.
+			// This simulates another driver having added an entry before our refresh.
+			client.PrependReactor("get", "resourceclaims", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				getAction, ok := action.(k8stesting.GetAction)
+				Expect(ok).To(BeTrue(), "expected GetAction")
+				if getAction.GetName() != "claim-multi-driver" {
+					return false, nil, nil
+				}
+				// Return a fresh claim with the other driver's entry added.
+				freshClaim := makeClaim("uid-multi-driver", "claim-multi-driver", "default")
+				freshClaim.Status.Devices = []resourceapi.AllocatedDeviceStatus{otherDriverEntry}
+				return true, freshClaim, nil
+			})
+
+			result, err := drv.PrepareResourceClaims(ctx, []*resourceapi.ResourceClaim{claim})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result[claim.UID].Err).To(BeNil())
+
+			// Verify the final update preserved the other driver's entry.
+			Expect(lastUpdateAction).NotTo(BeNil())
+			finalClaim, ok := lastUpdateAction.GetObject().(*resourceapi.ResourceClaim)
+			Expect(ok).To(BeTrue(), "expected ResourceClaim")
+			var foundOther, foundOwn bool
+			for _, d := range finalClaim.Status.Devices {
+				if d.Driver == "other-driver.example.com" && d.Device == "other-device" {
+					foundOther = true
+				}
+				if d.Driver == "ovsdpdk.k8snetworkplumbingwg.io" {
+					foundOwn = true
+				}
+			}
+			Expect(foundOther).To(BeTrue(), "other driver's entry should be preserved")
+			Expect(foundOwn).To(BeTrue(), "our driver's entry should be present")
 		})
 	})
 
@@ -380,5 +505,84 @@ var _ = Describe("preparedDevicesToResult", func() {
 		Expect(result.Devices).To(HaveLen(2))
 		Expect(result.Devices[0].DeviceName).To(Equal("br-dpdk0"))
 		Expect(result.Devices[1].DeviceName).To(Equal("br-dpdk1"))
+	})
+})
+
+var _ = Describe("filterDevicesByDriver", func() {
+	It("returns nil for empty input", func() {
+		result := filterDevicesByDriver(nil, "any-driver")
+		Expect(result).To(BeNil())
+	})
+
+	It("returns only devices matching the specified driver", func() {
+		devices := []resourceapi.AllocatedDeviceStatus{
+			{Driver: "driver-a", Device: "dev-a1"},
+			{Driver: "driver-b", Device: "dev-b1"},
+			{Driver: "driver-a", Device: "dev-a2"},
+		}
+		result := filterDevicesByDriver(devices, "driver-a")
+		Expect(result).To(HaveLen(2))
+		Expect(result[0].Device).To(Equal("dev-a1"))
+		Expect(result[1].Device).To(Equal("dev-a2"))
+	})
+
+	It("returns nil when no devices match", func() {
+		devices := []resourceapi.AllocatedDeviceStatus{
+			{Driver: "driver-b", Device: "dev-b1"},
+		}
+		result := filterDevicesByDriver(devices, "driver-a")
+		Expect(result).To(BeNil())
+	})
+})
+
+var _ = Describe("mergeDeviceStatus", func() {
+	It("returns owned entries when target is empty", func() {
+		owned := []resourceapi.AllocatedDeviceStatus{
+			{Driver: "driver-a", Device: "dev-a1"},
+		}
+		result := mergeDeviceStatus(nil, owned, "driver-a")
+		Expect(result).To(HaveLen(1))
+		Expect(result[0].Device).To(Equal("dev-a1"))
+	})
+
+	It("preserves entries from other drivers in target", func() {
+		target := []resourceapi.AllocatedDeviceStatus{
+			{Driver: "driver-b", Device: "dev-b1"},
+			{Driver: "driver-c", Device: "dev-c1"},
+		}
+		owned := []resourceapi.AllocatedDeviceStatus{
+			{Driver: "driver-a", Device: "dev-a1"},
+		}
+		result := mergeDeviceStatus(target, owned, "driver-a")
+		Expect(result).To(HaveLen(3))
+
+		drivers := make(map[string]string)
+		for _, d := range result {
+			drivers[d.Driver] = d.Device
+		}
+		Expect(drivers["driver-a"]).To(Equal("dev-a1"))
+		Expect(drivers["driver-b"]).To(Equal("dev-b1"))
+		Expect(drivers["driver-c"]).To(Equal("dev-c1"))
+	})
+
+	It("replaces existing entries for the same driver", func() {
+		target := []resourceapi.AllocatedDeviceStatus{
+			{Driver: "driver-a", Device: "old-dev"},
+			{Driver: "driver-b", Device: "dev-b1"},
+		}
+		owned := []resourceapi.AllocatedDeviceStatus{
+			{Driver: "driver-a", Device: "new-dev"},
+		}
+		result := mergeDeviceStatus(target, owned, "driver-a")
+		Expect(result).To(HaveLen(2))
+
+		var foundDriverA bool
+		for _, d := range result {
+			if d.Driver == "driver-a" {
+				foundDriverA = true
+				Expect(d.Device).To(Equal("new-dev"))
+			}
+		}
+		Expect(foundDriverA).To(BeTrue())
 	})
 })
