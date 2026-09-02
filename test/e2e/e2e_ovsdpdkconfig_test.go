@@ -22,6 +22,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // These specs temporarily mutate the cluster-wide "default" OvsDpdkConfig —
@@ -170,5 +172,31 @@ var _ = Describe("OvsDpdkConfig updated", Label(tier2), func() {
 
 		uidAAfter, _ := statOwnership(ctx, nodeName, socketDirA)
 		Expect(uidAAfter).To(Equal(plat.ovsUID), "pod A's dir should not be retroactively modified")
+	})
+})
+
+var _ = Describe("Missing OvsDpdkConfig", Label(tier1), func() {
+	It("prepare fails when the default OvsDpdkConfig doesn't exist", func(ctx SpecContext) {
+		DeferCleanup(applyYAML, mustRenderManifest("ovsdpdk-config.yaml.tmpl", defaultOvsDpdkConfigData()))
+		runKubectl("delete", "ovsdpdkconfig", "default", "--ignore-not-found")
+
+		const (
+			claimName = "e2e-config-missing-claim"
+			podName   = "e2e-pod-config-missing"
+		)
+		nodeName := workers[0]
+		applyAndCleanup(mustRenderManifest("policy.yaml.tmpl",
+			policyData{Name: "e2e-config-missing-policy", NodeNames: []string{nodeName}, Bridges: []string{plat.bridge0}}))
+		waitForDeviceInSlice(ctx, nodeName, plat.bridge0)
+		applyAndCleanup(mustRenderManifest("claim.yaml.tmpl",
+			claimData{Name: claimName, Namespace: testNamespace, BridgeName: plat.bridge0}))
+		applyAndCleanup(mustRenderManifest("pod.yaml.tmpl",
+			podData{Name: podName, Namespace: testNamespace, ClaimName: claimName}))
+
+		Consistently(func(g Gomega) {
+			p, err := cs.CoreV1().Pods(testNamespace).Get(ctx, podName, metav1.GetOptions{})
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(p.Status.Phase).NotTo(Equal(corev1.PodRunning))
+		}).WithTimeout(20 * time.Second).WithPolling(4 * time.Second).Should(Succeed())
 	})
 })
