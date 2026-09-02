@@ -5,6 +5,14 @@ on:
     branches: ["**"]
   pull_request:
     branches: ["**"]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: write
 
 jobs:
   test:
@@ -56,3 +64,365 @@ jobs:
       - name: Build container image
         run: |
           make build-image
+
+  authorize:
+    name: Authorize E2E Tests
+    if: |
+      github.event.issue.pull_request &&
+      github.event.comment.body == '/ok-to-test'
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      pr_sha: ${{ steps.pr_info.outputs.sha }}
+      pr_ref: ${{ steps.pr_info.outputs.ref }}
+    steps:
+      - name: Check if commenter is a collaborator
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const response = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: context.payload.comment.user.login
+              });
+
+              const permission = response.data.permission;
+              const hasPermission = ['admin', 'write', 'maintain'].includes(permission);
+
+              if (!hasPermission) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: `@${context.payload.comment.user.login} does not have permission to trigger tests. Only maintainers can use /ok-to-test.`
+                });
+                core.setOutput('should_run', 'false');
+              } else {
+                core.setOutput('should_run', 'true');
+              }
+            } catch (error) {
+              core.setFailed(`Error checking permissions: ${error.message}`);
+              core.setOutput('should_run', 'false');
+            }
+
+      - name: Get PR info
+        id: pr_info
+        if: steps.check.outputs.should_run == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('sha', pr.data.head.sha);
+            core.setOutput('ref', pr.data.head.ref);
+
+  build-images:
+    name: Build E2E Images
+    needs: authorize
+    if: needs.authorize.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.authorize.outputs.pr_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build OVS image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./test/e2e
+          file: ./test/e2e/Dockerfile.ovs
+          push: false
+          tags: ovs-dpdk-test:pr-${{ github.event.issue.number }}
+          outputs: type=docker,dest=/tmp/ovs-image.tar
+
+      - name: Build driver image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: dra-driver-ovsdpdk:pr-${{ github.event.issue.number }}
+          outputs: type=docker,dest=/tmp/driver-image.tar
+
+      - name: Upload OVS image
+        uses: actions/upload-artifact@v4
+        with:
+          name: ovs-image
+          path: /tmp/ovs-image.tar
+          retention-days: 1
+
+      - name: Upload driver image
+        uses: actions/upload-artifact@v4
+        with:
+          name: driver-image
+          path: /tmp/driver-image.tar
+          retention-days: 1
+
+  e2e-tier1:
+    name: E2E Tier 1
+    needs: [authorize, build-images]
+    if: needs.authorize.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Set status to pending
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'pending',
+              context: 'E2E Tests - Tier 1',
+              description: 'Running tier 1 tests...'
+            });
+
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.authorize.outputs.pr_sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Download OVS image
+        uses: actions/download-artifact@v4
+        with:
+          name: ovs-image
+          path: /tmp
+
+      - name: Download driver image
+        uses: actions/download-artifact@v4
+        with:
+          name: driver-image
+          path: /tmp
+
+      - name: Load OVS image
+        run: docker load --input /tmp/ovs-image.tar
+
+      - name: Load driver image
+        run: docker load --input /tmp/driver-image.tar
+
+      - name: Set up Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: dra-ovsdpdk-e2e
+          config: test/e2e/manifests/kind-config.yaml
+
+      - name: Load images into Kind
+        run: |
+          kind load docker-image ovs-dpdk-test:pr-${{ github.event.issue.number }} --name dra-ovsdpdk-e2e
+          kind load docker-image dra-driver-ovsdpdk:pr-${{ github.event.issue.number }} --name dra-ovsdpdk-e2e
+
+      - name: Deploy OVS
+        run: |
+          cd test/e2e
+          make deploy-ovs OVS_IMAGE=ovs-dpdk-test:pr-${{ github.event.issue.number }} CONTAINER_TOOL=docker
+
+      - name: Wait for OVS to be ready
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l app=ovs \
+            -n dra-driver-ovsdpdk \
+            --timeout=5m
+
+      - name: Deploy driver
+        run: |
+          kubectl apply -f deployments/crds/
+          kubectl apply -f deployments/base/namespace.yaml
+          kubectl apply -f deployments/base/rbac.yaml
+          sed 's|IMAGE|dra-driver-ovsdpdk:pr-${{ github.event.issue.number }}|g' deployments/base/daemonset.yaml | kubectl apply -f -
+
+      - name: Wait for driver to be ready
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l app=dra-driver-ovsdpdk \
+            -n dra-driver-ovsdpdk \
+            --timeout=5m
+
+      - name: Run Tier 1 tests
+        id: tier1
+        run: |
+          go test -v ./test/e2e/tier1/... \
+            -ginkgo.v \
+            -ginkgo.progress \
+            -ginkgo.no-color \
+            -timeout 30m
+
+      - name: Set status to success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'success',
+              context: 'E2E Tests - Tier 1',
+              description: 'All tier 1 tests passed'
+            });
+
+      - name: Set status to failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'failure',
+              context: 'E2E Tests - Tier 1',
+              description: 'Tier 1 tests failed'
+            });
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          kubectl get pods -A
+          kubectl describe pods -n dra-driver-ovsdpdk
+          kubectl logs -n dra-driver-ovsdpdk -l app=dra-driver-ovsdpdk --tail=100
+
+  e2e-tier2:
+    name: E2E Tier 2
+    needs: [authorize, build-images, e2e-tier1]
+    if: needs.authorize.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Set status to pending
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'pending',
+              context: 'E2E Tests - Tier 2',
+              description: 'Running tier 2 tests...'
+            });
+
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.authorize.outputs.pr_sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Download OVS image
+        uses: actions/download-artifact@v4
+        with:
+          name: ovs-image
+          path: /tmp
+
+      - name: Download driver image
+        uses: actions/download-artifact@v4
+        with:
+          name: driver-image
+          path: /tmp
+
+      - name: Load OVS image
+        run: docker load --input /tmp/ovs-image.tar
+
+      - name: Load driver image
+        run: docker load --input /tmp/driver-image.tar
+
+      - name: Set up Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: dra-ovsdpdk-e2e
+          config: test/e2e/manifests/kind-config.yaml
+
+      - name: Load images into Kind
+        run: |
+          kind load docker-image ovs-dpdk-test:pr-${{ github.event.issue.number }} --name dra-ovsdpdk-e2e
+          kind load docker-image dra-driver-ovsdpdk:pr-${{ github.event.issue.number }} --name dra-ovsdpdk-e2e
+
+      - name: Deploy OVS
+        run: |
+          cd test/e2e
+          make deploy-ovs OVS_IMAGE=ovs-dpdk-test:pr-${{ github.event.issue.number }} CONTAINER_TOOL=docker
+
+      - name: Wait for OVS to be ready
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l app=ovs \
+            -n dra-driver-ovsdpdk \
+            --timeout=5m
+
+      - name: Deploy driver
+        run: |
+          kubectl apply -f deployments/crds/
+          kubectl apply -f deployments/base/namespace.yaml
+          kubectl apply -f deployments/base/rbac.yaml
+          sed 's|IMAGE|dra-driver-ovsdpdk:pr-${{ github.event.issue.number }}|g' deployments/base/daemonset.yaml | kubectl apply -f -
+
+      - name: Wait for driver to be ready
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l app=dra-driver-ovsdpdk \
+            -n dra-driver-ovsdpdk \
+            --timeout=5m
+
+      - name: Run Tier 2 tests
+        id: tier2
+        env:
+          OVS_IMAGE: ovs-dpdk-test:pr-${{ github.event.issue.number }}
+        run: |
+          go test -v ./test/e2e/tier2/... \
+            -ginkgo.v \
+            -ginkgo.progress \
+            -ginkgo.no-color \
+            -timeout 30m
+
+      - name: Set status to success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'success',
+              context: 'E2E Tests - Tier 2',
+              description: 'All tier 2 tests passed'
+            });
+
+      - name: Set status to failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'failure',
+              context: 'E2E Tests - Tier 2',
+              description: 'Tier 2 tests failed'
+            });
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          kubectl get pods -A
+          kubectl describe pods -n dra-driver-ovsdpdk
+          kubectl logs -n dra-driver-ovsdpdk -l app=dra-driver-ovsdpdk --tail=100
