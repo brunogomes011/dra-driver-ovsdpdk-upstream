@@ -66,10 +66,10 @@ endef
   #
   # Optional env vars:
   #   TOPOLOGY_PCI_NUMA1 — PCI address of a virtio NIC on workers; enables topology tests with single NUMA
-  #   TOPOLOGY_PCI_NUMA2 — PCI address of a virtio NIC on workers; enables topology tests with double NUMAs 
-  #   GINKGO_ARGS   — extra args passed to `go test`, e.g. a --ginkgo.label-filter.
+  #   TOPOLOGY_PCI_NUMA2 — PCI address of a virtio NIC on workers; enables topology tests with double NUMAs
+  #   GINKGO_ARGS   — extra args passed to ginkgo, e.g. --ginkgo.label-filter.
 test:
-	go test -count=1 -v -timeout $(E2E_TIMEOUT) $(GINKGO_ARGS) . 
+	go test -count=1 -v -timeout $(E2E_TIMEOUT) . $(GINKGO_ARGS) 
 
 test-openshift:
 	E2E_PLATFORM=openshift $(MAKE) test E2E_TIMEOUT=60m GINKGO_ARGS='$(GINKGO_ARGS)'
@@ -77,10 +77,10 @@ test-openshift:
 # --- Tiered subsets (upstream/kind) ------------------------------------------
 
 test-tier1:
-	$(MAKE) test GINKGO_ARGS='-args --ginkgo.label-filter="tier1"'
+	$(MAKE) test GINKGO_ARGS='-args --ginkgo.v --ginkgo.label-filter="tier1"'
 
 test-tier2:
-	$(MAKE) test GINKGO_ARGS='-args --ginkgo.label-filter="tier2"'
+	$(MAKE) test GINKGO_ARGS='-args --ginkgo.v --ginkgo.label-filter="tier2"'
 
 # --- Tiered subsets (OpenShift) -----------------------------------------------
 
