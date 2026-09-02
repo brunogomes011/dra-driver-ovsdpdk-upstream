@@ -65,8 +65,6 @@ endef
   # Run e2e tests.  Expects the driver and OVS to be deployed and KUBECONFIG set.
   #
   # Optional env vars:
-  #   TOPOLOGY_PCI_NUMA1 — PCI address of a virtio NIC on workers; enables topology tests with single NUMA
-  #   TOPOLOGY_PCI_NUMA2 — PCI address of a virtio NIC on workers; enables topology tests with double NUMAs
   #   GINKGO_ARGS   — extra args passed to ginkgo, e.g. --ginkgo.label-filter.
 test:
 	go test -count=1 -v -timeout $(E2E_TIMEOUT) . $(GINKGO_ARGS) 
@@ -149,6 +147,8 @@ cluster-kubeconfig:
 #   make deploy-ovs                          # deploy containerised OVS
 #   make -C ../.. deploy                     # deploy the driver
 #   make test                                # run e2e tests
+#   make test-tier1							 # run e2e tier 1 tests
+#   make test-tier2							 # run e2e tier 2 tests
 #   make cluster-down-kind                   # tear down
 
 cluster-up-kind: build-ovs-image

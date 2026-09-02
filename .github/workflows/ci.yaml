@@ -1,10 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: ["**"]
-  pull_request:
-    branches: ["**"]
   issue_comment:
     types: [created]
 
@@ -15,32 +11,6 @@ permissions:
   statuses: write
 
 jobs:
-  ci:
-    name: CI
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: "1.26"
-
-      - name: Install acl utilities
-        run: sudo apt-get update && sudo apt-get install -y acl
-
-      - name: Vet
-        run: make vet
-
-      - name: Unit tests
-        run: make test
-
-      - name: Verify generated files
-        run: |
-          make generate
-          git diff --exit-code
-
   authorize:
     name: Authorize E2E Tests
     if: |
@@ -97,9 +67,80 @@ jobs:
             core.setOutput('sha', pr.data.head.sha);
             core.setOutput('ref', pr.data.head.ref);
 
+  ci:
+    name: CI
+    needs: authorize
+    if: needs.authorize.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set status to pending
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'pending',
+              context: 'CI - Basic Checks',
+              description: 'Running vet, tests, and verify...'
+            });
+
+      - name: Checkout PR code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.authorize.outputs.pr_sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+
+      - name: Install acl utilities
+        run: sudo apt-get update && sudo apt-get install -y acl
+
+      - name: Vet
+        run: make vet
+
+      - name: Unit tests
+        run: make test
+
+      - name: Verify generated files
+        run: |
+          make generate
+          git diff --exit-code
+
+      - name: Set status to success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'success',
+              context: 'CI - Basic Checks',
+              description: 'All basic checks passed'
+            });
+
+      - name: Set status to failure
+        if: failure() || cancelled()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'failure',
+              context: 'CI - Basic Checks',
+              description: 'Basic checks failed'
+            });
+
   build-images:
     name: Build E2E Images
-    needs: authorize
+    needs: [authorize, ci]
     if: needs.authorize.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:

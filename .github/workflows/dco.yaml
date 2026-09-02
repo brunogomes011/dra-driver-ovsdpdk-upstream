@@ -1,19 +1,102 @@
 name: DCO check
 on:
-  pull_request:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: write
 
 jobs:
+  authorize:
+    name: Authorize DCO Check
+    if: |
+      github.event.issue.pull_request &&
+      github.event.comment.body == '/ok-to-test'
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      pr_sha: ${{ steps.pr_info.outputs.sha }}
+      pr_ref: ${{ steps.pr_info.outputs.ref }}
+      base_sha: ${{ steps.pr_info.outputs.base_sha }}
+    steps:
+      - name: Check if commenter is a collaborator
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const response = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: context.payload.comment.user.login
+              });
+
+              const permission = response.data.permission;
+              const hasPermission = ['admin', 'write', 'maintain'].includes(permission);
+
+              if (!hasPermission) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: `@${context.payload.comment.user.login} does not have permission to trigger tests. Only maintainers can use /ok-to-test.`
+                });
+                core.setOutput('should_run', 'false');
+              } else {
+                core.setOutput('should_run', 'true');
+              }
+            } catch (error) {
+              core.setFailed(`Error checking permissions: ${error.message}`);
+              core.setOutput('should_run', 'false');
+            }
+
+      - name: Get PR info
+        id: pr_info
+        if: steps.check.outputs.should_run == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('sha', pr.data.head.sha);
+            core.setOutput('ref', pr.data.head.ref);
+            core.setOutput('base_sha', pr.data.base.sha);
+
   dco:
+    name: DCO Check
+    needs: authorize
+    if: needs.authorize.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Set status to pending
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'pending',
+              context: 'DCO Check',
+              description: 'Checking DCO sign-off...'
+            });
+
       - name: Check out the repo
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.authorize.outputs.pr_sha }}
           fetch-depth: 0
 
       - name: Check DCO sign-off
+        id: dco_check
         run: |
-          base="${{ github.event.pull_request.base.sha }}"
+          base="${{ needs.authorize.outputs.base_sha }}"
           failed=0
           for sha in $(git rev-list --no-merges "$base"..HEAD); do
             if ! git log -1 --format='%B' "$sha" | grep -qP '^Signed-off-by: .+ <.+>'; then
@@ -27,3 +110,31 @@ jobs:
             echo "Use 'git commit -s' to add it automatically."
             exit 1
           fi
+
+      - name: Set status to success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'success',
+              context: 'DCO Check',
+              description: 'All commits have DCO sign-off'
+            });
+
+      - name: Set status to failure
+        if: failure() || cancelled()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.authorize.outputs.pr_sha }}',
+              state: 'failure',
+              context: 'DCO Check',
+              description: 'DCO sign-off missing on some commits'
+            });
