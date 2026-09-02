@@ -1,0 +1,30 @@
+# Copyright 2026 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# OVS/OVS-DPDK test image based on Fedora latest.
+# Used by the e2e test suite to provide a real OVSDB + ovs-vswitchd
+# (in DPDK mode with --no-pci --no-huge) inside the Kind cluster.
+FROM fedora:latest
+
+RUN dnf install -y \
+        openvswitch \
+        openvswitch-dpdk \
+    && dnf clean all
+
+# Ensure runtime directories exist in the image layer so the container
+# can start without needing to create them (hostPath mounts may be read-only
+# at the directory level on some container runtimes).
+RUN mkdir -p /run/openvswitch /etc/openvswitch
+
+ENTRYPOINT ["/bin/bash"]

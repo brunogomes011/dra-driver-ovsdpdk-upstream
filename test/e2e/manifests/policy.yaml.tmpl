@@ -1,0 +1,25 @@
+apiVersion: ovsdpdk.k8snetworkplumbingwg.io/v1alpha1
+kind: OvsDpdkResourcePolicy
+metadata:
+  name: {{ .Name }}
+  namespace: dra-driver-ovsdpdk
+spec:
+  nodeSelector:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - key: kubernetes.io/hostname
+            operator: In
+            values:
+{{- range .NodeNames }}
+              - {{ . }}
+{{- end }}
+  bridges:
+{{- range .Bridges }}
+    - name: {{ . }}
+{{- if $.Mtu }}
+      mtu: {{ $.Mtu }}
+{{- end }}
+{{- if $.TopologyResource }}
+      topologyResource: {{ $.TopologyResource }}
+{{- end }}
+{{- end }}

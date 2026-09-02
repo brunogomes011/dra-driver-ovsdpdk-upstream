@@ -1,0 +1,37 @@
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: {{ .Name }}
+  namespace: {{ .Namespace }}
+spec:
+  spec:
+    devices:
+      requests:
+        - name: vhost-port
+          exactly:
+            deviceClassName: ovsdpdk
+{{- if .BridgeName }}
+            selectors:
+              - cel:
+                  expression: 'device.attributes["ovsdpdk.k8snetworkplumbingwg.io"].bridgeName == "{{ .BridgeName }}"'
+{{- end }}
+{{- if .HasConfig }}
+      config:
+        - opaque:
+            driver: ovsdpdk.k8snetworkplumbingwg.io
+            parameters:
+              apiVersion: ovsdpdk.k8snetworkplumbingwg.io/v1alpha1
+              kind: OvsPortConfig
+{{- if .Vlan }}
+              vlan: {{ .Vlan }}
+{{- end }}
+{{- if .HasPolicing }}
+              policing:
+{{- if .MaxRate }}
+                max_rate: {{ .MaxRate }}
+{{- end }}
+{{- if .Burst }}
+                burst: {{ .Burst }}
+{{- end }}
+{{- end }}
+{{- end }}

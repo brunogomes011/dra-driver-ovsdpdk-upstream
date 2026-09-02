@@ -1,0 +1,16 @@
+apiVersion: ovsdpdk.k8snetworkplumbingwg.io/v1alpha1
+kind: OvsDpdkConfig
+metadata:
+  name: {{ .Name }}
+spec:
+  vhostUser:
+    containerRootPath: {{ if .ContainerRootPath }}{{ .ContainerRootPath }}{{ else }}/var/run/ovsdpdk{{ end }}
+    user: {{ .User }}
+    group: {{ .Group }}
+{{- if .SelinuxLabel }}
+    selinuxLabel: {{ .SelinuxLabel }}
+{{- end }}
+    aclUsers:
+{{- range .AclUsers }}
+      - "{{ . }}"
+{{- end }}
