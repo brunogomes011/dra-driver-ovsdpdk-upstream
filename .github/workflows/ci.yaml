@@ -132,14 +132,14 @@ jobs:
       - name: Upload OVS image
         uses: actions/upload-artifact@v4
         with:
-          name: ovs-image
+          name: ovs-image-${{ github.run_id }}-${{ github.run_attempt }}
           path: /tmp/ovs-image.tar
           retention-days: 1
 
       - name: Upload driver image
         uses: actions/upload-artifact@v4
         with:
-          name: driver-image
+          name: driver-image-${{ github.run_id }}-${{ github.run_attempt }}
           path: /tmp/driver-image.tar
           retention-days: 1
 
@@ -176,13 +176,13 @@ jobs:
       - name: Download OVS image
         uses: actions/download-artifact@v4
         with:
-          name: ovs-image
+          name: ovs-image-${{ github.run_id }}-${{ github.run_attempt }}
           path: /tmp
 
       - name: Download driver image
         uses: actions/download-artifact@v4
         with:
-          name: driver-image
+          name: driver-image-${{ github.run_id }}-${{ github.run_attempt }}
           path: /tmp
 
       - name: Load OVS image
@@ -249,7 +249,7 @@ jobs:
             });
 
       - name: Set status to failure
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/github-script@v7
         with:
           script: |
@@ -302,13 +302,13 @@ jobs:
       - name: Download OVS image
         uses: actions/download-artifact@v4
         with:
-          name: ovs-image
+          name: ovs-image-${{ github.run_id }}-${{ github.run_attempt }}
           path: /tmp
 
       - name: Download driver image
         uses: actions/download-artifact@v4
         with:
-          name: driver-image
+          name: driver-image-${{ github.run_id }}-${{ github.run_attempt }}
           path: /tmp
 
       - name: Load OVS image
@@ -377,7 +377,7 @@ jobs:
             });
 
       - name: Set status to failure
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/github-script@v7
         with:
           script: |
