@@ -90,12 +90,24 @@ func New(cdi *dracdi.Handler, socketFS socketfs.SocketFS, ovsClient ovs.Client) 
 	return ds
 }
 
+func (d *DeviceState) clearConfig() {
+	d.mutex.Lock()
+	d.vhostUserConfig = nil
+	d.mutex.Unlock()
+}
+
 // UpdateConfig is called by the controller whenever the OvsDpdkConfig object changes.
 // spec is nil when the config object does not exist.
 func (d *DeviceState) UpdateConfig(ctx context.Context, spec *ovsdpdkdrav1alpha1.OvsDpdkConfigSpec) error {
 	logger := klog.FromContext(ctx).WithName("UpdateConfig")
 	if spec == nil || spec.VhostUser == nil {
-		return fmt.Errorf("missing VhostUser configuration")
+		// The config was deleted (or has no VhostUser). This is a legitimate
+		// state, not an error: clear the in-memory config so that prepareDevice
+		// consistently refuses to prepare devices without a config, matching the
+		// behavior after a node/driver restart.
+		logger.Info("OvsDpdkConfig missing or has no VhostUser; clearing config")
+		d.clearConfig()
+		return nil
 	}
 	d.updateConfig(spec.VhostUser)
 	logger.Info("Config updated", "config", spec.VhostUser)
